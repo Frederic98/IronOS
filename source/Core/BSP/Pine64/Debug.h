@@ -10,6 +10,7 @@
 
 #include "BSP.h"
 #include "TipThermoModel.h"
+#include "cmsis_os.h"
 #include <stdio.h>
 #include <string.h>
 

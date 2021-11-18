@@ -18,6 +18,11 @@ static TickType_t powerPulseWaitUnit     = 25 * TICKS_100MS;      // 2.5 s
 static TickType_t powerPulseDurationUnit = (5 * TICKS_100MS) / 2; // 250 ms
 TaskHandle_t      pidTaskNotification    = NULL;
 uint32_t          currentTempTargetDegC  = 0; // Current temperature target in C
+uint32_t          debugCount = 0;
+
+#ifdef DEBUG_UART_OUTPUT
+static TickType_t powerDebugInterval = (1 * TICKS_100MS); // 100 ms
+#endif
 
 /* StartPIDTask function */
 void startPIDTask(void const *argument __unused) {
@@ -28,6 +33,7 @@ void startPIDTask(void const *argument __unused) {
   setTipX10Watts(0); // disable the output driver if the output is set to be off
   TickType_t lastPowerPulseStart = 0;
   TickType_t lastPowerPulseEnd   = 0;
+  TickType_t lastPowerDebug      = 0;
 
   history<int32_t, PID_TIM_HZ> tempError = {{0}, 0, 0};
   currentTempTargetDegC                  = 0; // Force start with no output (off). If in sleep / soldering this will
@@ -115,7 +121,11 @@ void startPIDTask(void const *argument __unused) {
         setTipX10Watts(x10WattsOut);
       }
 #ifdef DEBUG_UART_OUTPUT
-      log_system_state(x10WattsOut);
+      if (xTaskGetTickCount() - lastPowerDebug > powerDebugInterval) {
+        lastPowerDebug = xTaskGetTickCount();
+        log_system_state(debugCount);
+        debugCount++;
+      }
 #endif
       resetWatchdog();
     } else {

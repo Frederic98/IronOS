@@ -61,20 +61,24 @@ void setup_uart() {
   gpio_init(UART_TX_GPIO_Port, GPIO_MODE_AF_PP, GPIO_OSPEED_10MHZ, UART_TX_Pin);
 
   /* connect port to USARTx_Rx */
-  gpio_init(UART_RX_GPIO_Port, GPIO_MODE_IPU, GPIO_OSPEED_10MHZ, UART_RX_Pin);
+  gpio_init(UART_RX_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, UART_RX_Pin);
 
   /* USART configure */
+  eclic_irq_enable(USART1_IRQn, 15, 15);
   usart_deinit(UART_PERIF);
-  usart_baudrate_set(UART_PERIF, 2 * 1000 * 1000U);
+  usart_baudrate_set(UART_PERIF, 115200U);
   usart_word_length_set(UART_PERIF, USART_WL_8BIT);
   usart_stop_bit_set(UART_PERIF, USART_STB_1BIT);
   usart_parity_config(UART_PERIF, USART_PM_NONE);
   usart_hardware_flow_rts_config(UART_PERIF, USART_RTS_DISABLE);
   usart_hardware_flow_cts_config(UART_PERIF, USART_CTS_DISABLE);
-  usart_receive_config(UART_PERIF, USART_RECEIVE_DISABLE); // Dont use rx for now
+  usart_receive_config(UART_PERIF, USART_RECEIVE_ENABLE); // Dont use rx for now
   usart_transmit_config(UART_PERIF, USART_TRANSMIT_ENABLE);
-  eclic_irq_enable(USART1_IRQn, 15, 15);
+  // usart_mute_mode_disable(UART_PERIF);
   usart_enable(UART_PERIF);
+  usart_interrupt_enable(UART_PERIF, USART_INT_RBNE);
+  usart_interrupt_enable(UART_PERIF, USART_INT_ERR);
+  usart_data_transmit(UART_PERIF, 's');
 }
 
 void setup_gpio() {

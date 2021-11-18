@@ -1,0 +1,182 @@
+diff --git a/build.sh b/build.sh
+old mode 100644
+new mode 100755
+diff --git a/source/Core/BSP/Pine64/Debug.cpp b/source/Core/BSP/Pine64/Debug.cpp
+index de40fe7..6e8f778 100644
+--- a/source/Core/BSP/Pine64/Debug.cpp
++++ b/source/Core/BSP/Pine64/Debug.cpp
+@@ -6,42 +6,64 @@
+  */
+ #include "Debug.h"
+ #include "Pins.h"
++#include "UART.h"
+ extern "C" {
+ #include "gd32vf103_usart.h"
+ }
+-char                    uartOutputBuffer[uartOutputBufferLength];
+-volatile uint32_t       currentOutputPos = 0xFF;
+-volatile uint32_t       outputLength     = 0;
++
+ extern volatile uint8_t pendingPWM;
+-void                    log_system_state(int32_t PWMWattsx10) {
+-  if (currentOutputPos == 0xFF) {
++char        uartOutputBuffer[uartOutputBufferLength];
+ 
++void log_system_state(int32_t PWMWattsx10) {
+     // Want to print a CSV log out the uart
+     // Tip_Temp_C,Handle_Temp_C,Output_Power_Wattx10,PWM,Tip_Raw\r\n
+     // 3+1+3+1+3+1+3+1+5+2 = 23, so sizing at 32 for now
++    // uint32_t       outputLength     = 0;
++    // outputLength = snprintf(uartOutputBuffer, uartOutputBufferLength, "%lu,%u,%li,%u,%lu\r\n", //
++    //                         TipThermoModel::getTipInC(false),                                  // Tip temp in C
++    //                         getHandleTemperature(),                                            // Handle temp in C X10
++    //                         PWMWattsx10,                                                       // Output Wattage
++    //                         pendingPWM,                                                        // PWM
++    //                         TipThermoModel::convertTipRawADCTouV(getTipRawTemp(0), true)       // Tip temp in uV
++    // );
++    // uartOutputBuffer[0] = 'a';
++    // outputLength = 1;
++    // uartWrite(uartOutputBuffer, outputLength);
+ 
+-    outputLength = snprintf(uartOutputBuffer, uartOutputBufferLength, "%lu,%u,%li,%u,%lu\r\n", //
+-                            TipThermoModel::getTipInC(false),                                  // Tip temp in C
+-                            getHandleTemperature(),                                            // Handle temp in C X10
+-                            PWMWattsx10,                                                       // Output Wattage
+-                            pendingPWM,                                                        // PWM
+-                            TipThermoModel::convertTipRawADCTouV(getTipRawTemp(0), true)       // Tip temp in uV
+-    );
+-
+-    // Now print this out the uart via IRQ (DMA cant be used as oled has it)
+-    currentOutputPos = 0;
+-    /* enable USART1 Transmit Buffer Empty interrupt */
+-    usart_interrupt_enable(UART_PERIF, USART_INT_TBE);
+-  }
+-}
+-
+-void USART1_IRQHandler(void) {
+-  if (RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_TBE)) {
+-    /* write one byte to the transmit data register */
+-    usart_data_transmit(UART_PERIF, uartOutputBuffer[currentOutputPos++]);
+-    if (currentOutputPos >= outputLength) {
+-      currentOutputPos = 0xFF; // Mark done
+-      usart_interrupt_disable(UART_PERIF, USART_INT_TBE);
++    if(uartIndexOf('\n') >= 0){
++        // for(int i=0; i<10; i++){
++        //     uartOutputBuffer[i] = '0' + i;
++        // }
++        int32_t len = uartReadUntil('\n', uartOutputBuffer, uartOutputBufferLength);
++        // uartOutputBuffer[0]++;
++        uartWrite(uartOutputBuffer, len);
+     }
+-  }
+ }
++
++// void USART1_IRQHandler(void) {
++//   // usart_data_transmit(UART_PERIF, 'i');
++//   if((RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_ERR_NERR)) || 
++//      (RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_ERR_FERR)) ||
++//      (RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_ERR_ORERR))){
++//        usart_data_transmit(UART_PERIF, 'e');
++//      }
++//   if(RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_RBNE)){
++//     char b = usart_data_receive(UART_PERIF);
++//     // usart_flag_clear(UART_PERIF, USART_FLAG_RBNE);
++//     // usart_interrupt_flag_clear(UART_PERIF, USART_INT_FLAG_RBNE);
++//     usart_data_transmit(UART_PERIF, b);
++//   }
++//   // if (RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_TBE)) {
++//   //   /* write one byte to the transmit data register */
++//   //   usart_data_transmit(UART_PERIF, uartOutputBuffer[currentOutputPos++]);
++//   //   if (currentOutputPos >= outputLength) {
++//   //     currentOutputPos = 0xFF; // Mark done
++//   //     usart_interrupt_disable(UART_PERIF, USART_INT_TBE);
++//   //   }
++//   // }
++//   // if (RESET != usart_interrupt_flag_get(UART_PERIF, USART_INT_FLAG_RBNE)){
++//   //   /* Read byte from receive buffer */
++//   //   char b = usart_data_receive(UART_PERIF);
++//   //   usart_data_transmit(UART_PERIF, b);
++//   // }
++// }
+diff --git a/source/Core/BSP/Pine64/Debug.h b/source/Core/BSP/Pine64/Debug.h
+index a9a60ec..059c111 100644
+--- a/source/Core/BSP/Pine64/Debug.h
++++ b/source/Core/BSP/Pine64/Debug.h
+@@ -10,6 +10,7 @@
+ 
+ #include "BSP.h"
+ #include "TipThermoModel.h"
++#include "cmsis_os.h"
+ #include <stdio.h>
+ #include <string.h>
+ 
+diff --git a/source/Core/BSP/Pine64/Setup.cpp b/source/Core/BSP/Pine64/Setup.cpp
+index 76bd826..d8903d1 100644
+--- a/source/Core/BSP/Pine64/Setup.cpp
++++ b/source/Core/BSP/Pine64/Setup.cpp
+@@ -61,20 +61,24 @@ void setup_uart() {
+   gpio_init(UART_TX_GPIO_Port, GPIO_MODE_AF_PP, GPIO_OSPEED_10MHZ, UART_TX_Pin);
+ 
+   /* connect port to USARTx_Rx */
+-  gpio_init(UART_RX_GPIO_Port, GPIO_MODE_IPU, GPIO_OSPEED_10MHZ, UART_RX_Pin);
++  gpio_init(UART_RX_GPIO_Port, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_50MHZ, UART_RX_Pin);
+ 
+   /* USART configure */
++  eclic_irq_enable(USART1_IRQn, 15, 15);
+   usart_deinit(UART_PERIF);
+-  usart_baudrate_set(UART_PERIF, 2 * 1000 * 1000U);
++  usart_baudrate_set(UART_PERIF, 115200U);
+   usart_word_length_set(UART_PERIF, USART_WL_8BIT);
+   usart_stop_bit_set(UART_PERIF, USART_STB_1BIT);
+   usart_parity_config(UART_PERIF, USART_PM_NONE);
+   usart_hardware_flow_rts_config(UART_PERIF, USART_RTS_DISABLE);
+   usart_hardware_flow_cts_config(UART_PERIF, USART_CTS_DISABLE);
+-  usart_receive_config(UART_PERIF, USART_RECEIVE_DISABLE); // Dont use rx for now
++  usart_receive_config(UART_PERIF, USART_RECEIVE_ENABLE); // Dont use rx for now
+   usart_transmit_config(UART_PERIF, USART_TRANSMIT_ENABLE);
+-  eclic_irq_enable(USART1_IRQn, 15, 15);
++  // usart_mute_mode_disable(UART_PERIF);
+   usart_enable(UART_PERIF);
++  usart_interrupt_enable(UART_PERIF, USART_INT_RBNE);
++  usart_interrupt_enable(UART_PERIF, USART_INT_ERR);
++  usart_data_transmit(UART_PERIF, 's');
+ }
+ 
+ void setup_gpio() {
+diff --git a/source/Core/Threads/PIDThread.cpp b/source/Core/Threads/PIDThread.cpp
+index 66302f9..e143b70 100644
+--- a/source/Core/Threads/PIDThread.cpp
++++ b/source/Core/Threads/PIDThread.cpp
+@@ -18,6 +18,11 @@ static TickType_t powerPulseWaitUnit     = 25 * TICKS_100MS;      // 2.5 s
+ static TickType_t powerPulseDurationUnit = (5 * TICKS_100MS) / 2; // 250 ms
+ TaskHandle_t      pidTaskNotification    = NULL;
+ uint32_t          currentTempTargetDegC  = 0; // Current temperature target in C
++uint32_t          debugCount = 0;
++
++#ifdef DEBUG_UART_OUTPUT
++static TickType_t powerDebugInterval = (1 * TICKS_100MS); // 100 ms
++#endif
+ 
+ /* StartPIDTask function */
+ void startPIDTask(void const *argument __unused) {
+@@ -28,6 +33,7 @@ void startPIDTask(void const *argument __unused) {
+   setTipX10Watts(0); // disable the output driver if the output is set to be off
+   TickType_t lastPowerPulseStart = 0;
+   TickType_t lastPowerPulseEnd   = 0;
++  TickType_t lastPowerDebug      = 0;
+ 
+   history<int32_t, PID_TIM_HZ> tempError = {{0}, 0, 0};
+   currentTempTargetDegC                  = 0; // Force start with no output (off). If in sleep / soldering this will
+@@ -115,7 +121,11 @@ void startPIDTask(void const *argument __unused) {
+         setTipX10Watts(x10WattsOut);
+       }
+ #ifdef DEBUG_UART_OUTPUT
+-      log_system_state(x10WattsOut);
++      if (xTaskGetTickCount() - lastPowerDebug > powerDebugInterval) {
++        lastPowerDebug = xTaskGetTickCount();
++        log_system_state(debugCount);
++        debugCount++;
++      }
+ #endif
+       resetWatchdog();
+     } else {
